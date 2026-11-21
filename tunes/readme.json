@@ -1,0 +1,13 @@
+
+[
+  {
+    "id": "mode1fugue1",
+    "title": "Mode I Fugue 1",
+    "mode": 1
+  },
+  {
+    "id": "mode2fugue2",
+    "title": "Mode II Fugue 2",
+    "mode": 2
+  }
+]

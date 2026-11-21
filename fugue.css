@@ -1,0 +1,124 @@
+main{max-width:1460px;padding:0 14px;margin:auto;display:grid;gap:12px}
+.panel{background:#fff;border:1px solid #d6d3cf;border-radius:12px;padding:17px 19px;min-width:0}
+.panel h2{font:600 29px 'Cormorant Garamond',Georgia,serif;margin:0 0 10px}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}.pair .panel{min-height:200px}
+.notation{min-height:105px;overflow:auto}.notation svg{display:block;max-width:100%;height:auto}
+.answer-space{position:relative;min-height:115px;display:flex;align-items:center;justify-content:center}.answer-space .notation{width:100%}.hidden{visibility:hidden}
+.gold-outline{position:absolute;z-index:2;border:1px solid #bca04c;background:#fff5cc;border-radius:999px;padding:12px 28px;font-weight:600}
+.gold-outline.revealed{position:static;margin:8px auto 0;display:block}.answer-space:has(.revealed){display:block}
+.section-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}
+.legend{display:flex;align-items:center;gap:8px;font-size:12px}.swatch{display:inline-block;width:22px;height:13px;border-radius:3px;border:1px solid #bd9900}.swatch.subject{background:#ffcd00}.swatch.answer{background:#fff5cc}.wave{font-size:24px;color:#68788b}
+.map-scroller{overflow-x:auto}.map-scroller svg{width:100%;min-width:800px;height:auto;display:block}.hint{color:#62646a;font-size:12px;margin:10px 0 0}
+.catalog{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.voice-card{border:1px solid #c7c8cd;border-radius:10px;padding:15px;min-height:105px}.voice-card h3{font:600 25px 'Cormorant Garamond',Georgia,serif;margin:0 0 11px;border-bottom:1px solid #ddd;padding-bottom:9px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}.chip{border-radius:8px;padding:9px 12px;border:1px solid #c8a41b;background:#ffcd00;font-weight:700;font-size:16px;white-space:nowrap}.chip.answer{background:#fff5cc}
+.foreground{padding:0;overflow:hidden;margin-bottom:0}.foreground summary{background:linear-gradient(120deg,#2b2b2b,#0a0a0a);color:#fff;list-style:none;cursor:pointer;padding:16px 19px;display:flex;align-items:center;justify-content:space-between;gap:12px}.foreground summary::-webkit-details-marker{display:none}.foreground-title{font:600 29px 'Cormorant Garamond',Georgia,serif}.foreground-title small{font-size:19px;font-weight:400}.summary-hint{font-size:13px;color:#eee}.chevron{font-size:21px;margin-left:7px}.foreground[open] .chevron{display:inline-block;transform:rotate(180deg)}.foreground-body{padding:15px 19px}.foreground-controls{display:flex;justify-content:flex-end;gap:15px;flex-wrap:wrap}.foreground-controls label{display:flex;align-items:center;gap:7px;font-size:12px}.foreground-controls button{border:1px solid #ccc;background:#fafafa;border-radius:5px;width:27px;height:27px}.foreground-controls output{min-width:34px;text-align:center}.foreground-notation{min-height:200px}
+footer{text-align:center;font-size:12px;color:#777;padding:20px}
+@media(max-width:950px){.trainer-hero-left{width:100%}.trainer-hero-right{display:none}.key-toolbar-card{flex-wrap:wrap}}
+@media(max-width:700px){.pair{grid-template-columns:1fr}.catalog{grid-template-columns:repeat(2,minmax(0,1fr))}.trainer-hero{margin:8px}.trainer-hero-left{padding:16px}.trainer-model-title{font-size:37px}}
+@media(max-width:400px){.catalog{grid-template-columns:1fr}}
+
+
+body{margin:0;background:#f3f2ed;color:#1b1b1f;font-family:Inter,Arial,sans-serif}
+.trainer-hero{margin:12px 10px 10px}
+.trainer-hero-left{width:100%}
+.trainer-hero-right{pointer-events:none}
+.fugue-secondary-controls[hidden]{display:none!important}
+.pair .panel{min-height:0;padding:7px 11px 5px}.pair .panel h2{margin:0 0 2px}.pair .notation{min-height:0}.pair .answer-space{min-height:90px}.pair .answer-space .notation{min-height:0}
+.pair .notation svg{max-height:150px;width:auto;max-width:100%}
+@media(max-width:700px){.pair{grid-template-columns:1fr}.catalog{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Compact notation cards: no redundant score title, composer or mode headings. */
+.pair .panel{padding:5px 10px 4px;min-height:0}
+.pair .panel h2{margin:0 0 0;line-height:1.05}
+.pair .notation{min-height:0;line-height:0}
+.pair .notation svg{max-height:112px;width:auto;max-width:100%;height:auto}
+.pair .answer-space{min-height:76px;align-items:center}
+.pair .answer-space .notation{min-height:0}
+.pair .gold-outline{padding:8px 20px}
+.pair .gold-outline.revealed{margin:2px auto 0}
+.foreground-body{padding-top:5px}
+.foreground-notation{min-height:0}
+
+/* Keep the answer disclosure beside the heading, without reflow. */
+.pair .answer-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.pair .answer-heading h2{margin:0}
+.pair .answer-heading .gold-outline,.pair .answer-heading .gold-outline.revealed{position:static;display:inline-block;margin:0;padding:7px 15px;white-space:nowrap}
+.pair .answer-space,.pair .answer-space:has(.revealed){display:block;min-height:76px}
+
+.clef-selectors{display:flex;align-items:center;flex-wrap:wrap;gap:9px 13px;margin-right:auto}.foreground-controls .clef-selectors label{white-space:nowrap}.clef-selectors select{font:inherit;padding:5px 7px;border:1px solid #c7c7c7;border-radius:5px;background:white;color:#222;max-width:125px}
+
+.foreground-controls .highlight-control{white-space:nowrap;cursor:pointer;font-size:12px;gap:6px}
+.foreground-controls .highlight-control input{accent-color:#c69b00;width:15px;height:15px;margin:0}
+
+/* Foreground octave controls */
+
+.octave-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  margin-right: 12px;
+}
+
+.octave-controls button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  min-width: 48px;
+  height: 27px;
+  padding: 0 6px;
+  box-sizing: border-box;
+  border: 1px solid #d0d0d0;
+  border-radius: 6px;
+  background: #fafafa;
+  color: #222;
+  font: inherit;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.octave-controls button:hover:not(:disabled) {
+  background: #fff0bd;
+  border-color: #cba63d;
+}
+
+.octave-controls button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+
+/* Organ Studio footer lockup */
+
+.organ-studio-footer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  padding: 24px 16px;
+  box-sizing: border-box;
+  background: transparent;
+}
+
+.organ-studio-footer .logo-card {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+}
+
+.organ-studio-footer .logo-card img {
+  display: block;
+  height: 165px;
+  width: auto;
+  max-width: 100%;
+}
+
+@media (max-width: 700px) {
+  .organ-studio-footer .logo-card img {
+    height: 64px;
+  }
+}

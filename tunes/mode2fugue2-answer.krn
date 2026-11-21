@@ -1,0 +1,27 @@
+!!!COM: Pachelbel, Johann
+!!!OTL: Fugue Answer
+!!!OMD: Mode II
+!!!FUG: 2
+!!!KEY: G minor
+!!!MTR: 4/4
+**kern
+*M4/4
+*clefG2
+*k[b-e-]
+*G:
+=1
+8dL
+16d
+16cJ
+8B-L
+8GJ
+8dL
+16d
+16cJ
+8B-L
+8GJ
+=2
+4d
+4e
+4f
+*-

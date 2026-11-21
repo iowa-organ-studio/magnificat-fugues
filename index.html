@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Pachelbel Fugue Trainer</title>
+  <link rel="icon" href="img/favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@300;400;500;600&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="venetian-original.css">
+  <link rel="stylesheet" href="fugue.css">
+  <script src="js/verovio-toolkit-hum.js"></script>
+</head>
+
+<body>
+  <div class="trainer-hero">
+
+    <!-- LEFT SIDE -->
+
+    <div class="trainer-hero-left">
+
+      <!-- TITLE ROW -->
+
+      <div class="trainer-title-row">
+
+        <div id="modelTitle" class="trainer-model-title">
+          Pachelbel Fugue Trainer
+        </div>
+
+        <div id="keyDisplay" class="hero-key-pill">
+          Current key:
+        </div>
+
+        <div id="modeDisplay" class="hero-key-pill">
+          Mode II Fugue 2
+        </div>
+
+      </div>
+
+
+      <!-- TOOLBAR ROW -->
+
+      <div class="hero-toolbar-row">
+
+        <!-- KEY FILTERS -->
+
+        <div class="key-toolbar-card">
+
+          <button class="key-btn" data-count="0">0♯/♭</button>
+          <button class="key-btn" data-count="1">1♯/♭</button>
+          <button class="key-btn" data-count="2">2♯/♭</button>
+          <button class="key-btn" data-count="3">3♯/♭</button>
+          <button class="key-btn" data-count="4">4♯/♭</button>
+          <button class="key-btn" data-count="5">5♯/♭</button>
+          <button class="key-btn" data-count="6">6♯/♭</button>
+          <button class="key-btn" data-count="7">7♯/♭</button>
+
+          <button id="selectAllKeysBtn">All</button>
+
+          <button id="selectNoneKeysBtn">None</button>
+
+        </div>
+
+
+        <!-- TRANSPOSITION -->
+
+        <div class="transpose-toolbar-card">
+
+          <button id="downKey">–</button>
+
+          <button id="upKey">+</button>
+
+          <button id="enharmonicBtn">
+            ♯/♭
+          </button>
+
+        </div>
+      </div>
+
+
+      <!-- CTA ROW -->
+
+      <div class="hero-cta-row">
+
+        <button id="random" class="hero-random-btn">
+          Random Fugue →
+        </button>
+
+        <div class="mode-filter-card" id="modeFilterCard"><button class="mode-filter-btn selected" data-mode="1">Mode
+            I</button><button class="mode-filter-btn selected" data-mode="2">Mode II</button><button
+            class="mode-filter-btn selected" data-mode="3">Mode III</button><button class="mode-filter-btn selected"
+            data-mode="4">Mode IV</button><button class="mode-filter-btn selected" data-mode="5">Mode V</button><button
+            class="mode-filter-btn selected" data-mode="6">Mode VI</button><button class="mode-filter-btn selected"
+            data-mode="7">Mode VII</button><button class="mode-filter-btn selected" data-mode="8">Mode VIII</button>
+        </div>
+
+      </div>
+    </div>
+
+
+
+
+    <!-- RIGHT SIDE -->
+
+    <div class="trainer-hero-right">
+
+      <img id="heroMusicImage" class="music-image" src="img/manuscript.jpg" alt="">
+
+      <img id="heroComposerImage" class="composer-image" src="img/pachelbel.jpg" alt="Pachelbel">
+
+    </div>
+
+  </div>
+  <div class="fugue-secondary-controls" hidden><select id="fugue"></select><select id="key"></select><span
+      id="status"></span></div>
+  <main>
+    <section class="pair">
+      <article class="panel">
+        <h2>Subject</h2>
+        <div class="notation" id="subjectScore"><span class="placeholder">Loading notation…</span></div>
+      </article>
+      <article class="panel">
+        <div class="answer-heading">
+          <h2>Answer</h2><button id="answerToggle" class="gold-outline">Show answer</button>
+        </div>
+        <div class="answer-space">
+          <div id="answerScore" class="notation hidden" aria-hidden="true"></div>
+        </div>
+      </article>
+    </section>
+    <section class="panel">
+      <div class="section-head">
+        <h2>Fugue map</h2>
+        <div class="legend"><span class="swatch subject"></span>Subject <span class="swatch answer"></span>Answer <span
+            class="wave">∿∿</span> Counterpoint</div>
+      </div>
+      <div id="map" class="map-scroller"></div>
+    </section>
+    <section class="panel">
+      <h2>Practice catalog</h2>
+      <div id="catalog" class="catalog"></div>
+      <p class="hint">↓ = subject or answer is in the lowest sounding voice. Voice count is calculated at the beginning
+        of each entry.</p>
+    </section>
+    <details id="foreground" class="foreground panel">
+      <summary><span class="foreground-title">Foreground <small>— Pachelbel’s setting</small></span><span
+          class="summary-hint"><span id="foregroundHint">Click to reveal the score</span> <span
+            class="chevron">⌄</span></span></summary>
+      <div class="foreground-body">
+
+        <div class="foreground-controls">
+
+          <div class="clef-selectors" aria-label="Voice clefs">
+
+            <label>
+              Soprano
+              <select id="clefS">
+                <option value="G1">French violin</option>
+                <option value="G2" selected>Treble</option>
+                <option value="C1">Soprano</option>
+              </select>
+            </label>
+
+            <label>
+              Alto
+              <select id="clefA">
+                <option value="C3">Alto</option>
+                <option value="G2" selected>Treble</option>
+              </select>
+            </label>
+
+            <label>
+              Tenor
+              <select id="clefT">
+                <option value="G2">Treble</option>
+                <option value="C4">Tenor</option>
+                <option value="F4" selected>Bass</option>
+              </select>
+            </label>
+
+            <label>
+              Bass
+              <select id="clefB">
+                <option value="F4" selected>Bass</option>
+                <option value="F3">Baritone</option>
+              </select>
+            </label>
+
+          </div>
+
+          <!-- Foreground octave controls -->
+
+
+          <div class="octave-controls">
+            <button id="octaveDown" type="button" title="Lower foreground one octave">−8va</button>
+            <button id="octaveUp" type="button" title="Raise foreground one octave">+8va</button>
+          </div>
+
+
+          <!-- Highlight checkbox -->
+
+          <label class="highlight-control">
+            <input type="checkbox" id="highlightEntries">
+            Highlight subject/answer
+          </label>
+
+          <!-- Scale controls -->
+
+          <label>
+            Scale
+            <button id="scaleDown" type="button">−</button>
+            <output id="scaleValue">42</output>
+            <button id="scaleUp" type="button">+</button>
+          </label>
+
+          <!-- Spacing controls -->
+
+          <label>
+            Space
+            <button id="spaceDown" type="button">−</button>
+            <output id="spaceValue">0.50</output>
+            <button id="spaceUp" type="button">+</button>
+          </label>
+
+        </div>
+
+        <div id="foregroundScore" class="notation foreground-notation"></div>
+        
+      </div>
+    </details>
+  </main>
+
+  <footer class="organ-studio-footer">
+    <div class="logo-card">
+      <img src="img/Organ-Studio-LockupStacked-RGB.svg" alt="Organ Studio">
+    </div>
+  </footer>
+
+  <script src="js/app.js"></script>
+  <script src="js/highlight.js"></script>
+</body>
+
+</html>
