@@ -1,0 +1,24 @@
+!!!COM: Pachelbel, Johann
+!!!OTL: Fugue Subject
+!!!OMD: Mode VIII
+!!!FUG: 3
+!!!KEY: F major
+!!!MTR: 4/4
+**kern
+*M4/4
+*clefG2
+*k[f#]
+*G:
+=1
+4dd
+8bL
+8gJ
+8ccL
+16dd
+16eeJ
+8.ddL
+16ccJ
+=2
+4b
+=||
+*-
