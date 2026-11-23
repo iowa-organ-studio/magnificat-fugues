@@ -20,10 +20,29 @@ const root=document.getElementById('practiceAccessRoot');
 root.innerHTML=`<div class="pa-bar"><button id="pa-login">Student login</button><button id="pa-history">My practice history</button></div>
 <dialog id="pa-login-dialog"><div class="pa-head"><h2>Student login</h2><button id="pa-login-close" aria-label="Close">✕</button></div><div id="pa-out"><form id="pa-form"><label>Eight-digit student UID <input id="pa-uid" inputmode="numeric" maxlength="8" pattern="[0-9]{8}" required></label> <button type="submit">Sign in</button></form></div><div id="pa-in" hidden><p id="pa-welcome"></p><button id="pa-logout">Log out</button></div><p id="pa-message" role="status"></p></dialog>
 <dialog id="pa-history-dialog"><div class="pa-head"><h2>My practice history</h2><button id="pa-history-close" aria-label="Close">✕</button></div><div id="pa-history-body" class="pa-scroll"></div></dialog>`;
-const el=id=>root.querySelector('#'+id);
-const loginDialog=el('pa-login-dialog'), historyDialog=el('pa-history-dialog');
-el('pa-login').onclick=()=>loginDialog.showModal();
-el('pa-login-close').onclick=()=>loginDialog.close();
+
+const el = id => root.querySelector('#' + id);
+
+const loginDialog = el('pa-login-dialog');
+const historyDialog = el('pa-history-dialog');
+
+el('pa-login').onclick = () => {
+  loginDialog.showModal();
+};
+
+el('pa-login-close').onclick = () => {
+  loginDialog.close();
+};
+
+el('pa-history').onclick = () => {
+  historyDialog.showModal();
+  loadHistory();
+};
+
+el('pa-history-close').onclick = () => {
+  historyDialog.close();
+};
+
 el('pa-history').onclick=()=>{historyDialog.showModal();loadHistory();};
 el('pa-history-close').onclick=()=>historyDialog.close();
 let ready=false,queue=Promise.resolve();
@@ -202,13 +221,50 @@ window.addEventListener('pagehide',stopAttempt);
 
 // Venetian practice-history layout: tabs, subtabs, and key-by-exercise grid.
 // The only domain-specific change is that the navigation represents fugue modes.
-const KEY_ORDER=['C','G','D','A','E','B','F#','C#','F','Bb','Eb','Ab','Db','Gb','Cb',
-  'a','e','b','f#','c#','g#','d#','a#','d','g','c','f','bb','eb','ab'];
+//
+// SHARED ORGAN STUDIO PRACTICE HISTORY
+// Identical navigation and grid conventions across trainers.
+// Magnificat Fugues opens as the selected tab.
+//
 
+const KEY_ORDER = [
+  'C', 'G', 'D', 'A', 'E', 'B', 'F#', 'C#',
+  'F', 'Bb', 'Eb', 'Ab', 'Db', 'Gb', 'Cb',
+  'a', 'e', 'b', 'f#', 'c#', 'g#', 'd#', 'a#',
+  'd', 'g', 'c', 'f', 'bb', 'eb', 'ab'
+];
+
+const ROMAN = {
+  I: 1, II: 2, III: 3, IV: 4, V: 5,
+  VI: 6, VII: 7, VIII: 8, IX: 9, X: 10
+};
+
+const MODE_MINOR = new Set([1, 2, 3, 4, 9, 10]);
+
+const SHARED_TRAINER_BASE =
+  'https://iowa-organ-studio.github.io/improvisation-models/';
+
+const SHARED_COLLECTIONS = {
+  'Pachelbel-Aria':
+    'sublandings/Pachelbel-Aria/pachelbel-aria.json',
+  'Boehm-Chorale-Partita':
+    'sublandings/Boehm-Chorale-Partita/boehm-chorale-partita.json',
+  'Bach-WTC':
+    'sublandings/Bach-WTC/bach-wtc.json'
+};
+
+let sharedNavigationCache = null;
+
+
+// Preserve lowercase b for B minor.
+// Convert only actual accidentals.
 
 const niceKey = key => {
   const value = String(key || '').trim();
-  const match = value.match(/^([A-Ga-g])([#♯b♭]?)(.*)$/);
+
+  const match = value.match(
+    /^([A-Ga-g])([#♯b♭]?)(.*)$/
+  );
 
   if (!match) return value;
 
@@ -223,93 +279,507 @@ const niceKey = key => {
 };
 
 
-const keyFromTonic=(tonic,minor)=>{
-  if(!tonic)return null;
-  const m=String(tonic).trim().replace(/♯/g,'#').replace(/♭/g,'b').match(/^([A-Ga-g])([#b]?)$/);
-  if(!m)return null;
-  const key=(minor?m[1].toLowerCase():m[1].toUpperCase())+m[2];
-  return KEY_ORDER.includes(key)?key:null;
+// Convert a tonic into the existing grid key format.
+
+const keyFromTonic = (tonic, minor) => {
+  if (!tonic) return null;
+
+  const match = String(tonic)
+    .trim()
+    .replace(/♯/g, '#')
+    .replace(/♭/g, 'b')
+    .match(/^([A-Ga-g])([#b]?)$/);
+
+  if (!match) return null;
+
+  const key =
+    (minor
+      ? match[1].toLowerCase()
+      : match[1].toUpperCase()) +
+    match[2];
+
+  return KEY_ORDER.includes(key) ? key : null;
 };
-function historyKey(item){
-  const raw=String(item.key||'').replace(/^Current key:\s*/i,'').trim();
-  const tonic=raw.replace(/\s+(major|minor)\s*$/i,'').trim();
-  const mode=Number(item.mode||String(item.modelId||'').match(/^mode(\d+)/)?.[1]);
-  if(!mode)return null;
-  return keyFromTonic(tonic,mode<=4);
-}
-function addButton(parent,label,selected,fn){
-  const btn=document.createElement('button');btn.type='button';btn.className='pa-tab'+(selected?' pa-active':'');
-  btn.textContent=label;btn.setAttribute('aria-pressed',String(selected));btn.onclick=fn;parent.append(btn);
-}
-function drawGrid(host,attempts,models){
-  const allowed=new Set(models.map(x=>x.id));
-  const names=new Map(models.map(x=>[x.id,x.title]));
-  const byExercise=new Map();let skipped=0;
-  for(const item of attempts){
-    if(!allowed.has(item.modelId)||Number(item.durationSeconds)<MIN_SECONDS)continue;
-    const key=historyKey(item);
-    if(!key){skipped++;continue;}
-    const name=names.get(item.modelId)||item.exercise||item.modelId;
-    if(!byExercise.has(name))byExercise.set(name,new Map());
-    const counts=byExercise.get(name);counts.set(key,(counts.get(key)||0)+1);
+
+
+// Interpret keys from both websites.
+
+function historyKey(item) {
+  const raw = String(item.key || '').trim();
+
+  const venetian =
+    item.modelId === 'Venetian-Toccata' ||
+    /Venetian|Merulo/i.test(item.model || '') ||
+    /^Tone\s+[IVX]+\s*\(/i.test(raw);
+
+  if (venetian) {
+    const tone =
+      item.venetianTone ||
+      raw.match(/Tone\s+([IVX]+)/i)?.[1];
+
+    const number = ROMAN[
+      String(tone || '').toUpperCase()
+    ];
+
+    const final =
+      item.final ||
+      raw.match(
+        /\(([A-Ga-g][♯♭#b]?)\s+Final\)/i
+      )?.[1];
+
+    return number
+      ? keyFromTonic(final, MODE_MINOR.has(number))
+      : null;
   }
-  if(!byExercise.size){const msg=document.createElement('p');msg.textContent='No recorded fugues for this selection.';host.append(msg);return;}
-  const wrap=document.createElement('div');wrap.className='pa-grid-scroll';
-  const table=document.createElement('table');table.className='pa-grid';
-  const header=document.createElement('thead'),hr=document.createElement('tr');
-  for(const label of ['Exercise','Totals',...KEY_ORDER.map(niceKey)]){
-    const th=document.createElement('th');th.textContent=label;hr.append(th);
+
+  const cleaned = raw
+    .replace(/^Current key:\s*/i, '')
+    .trim();
+
+  const modeName = cleaned.match(
+    /\b(major|minor)\b/i
+  )?.[1]?.toLowerCase();
+
+  if (modeName) {
+    const tonic = cleaned
+      .replace(/\b(major|minor)\b/ig, '')
+      .trim();
+
+    return keyFromTonic(
+      tonic,
+      modeName === 'minor'
+    );
   }
-  header.append(hr);table.append(header);
-  const body=document.createElement('tbody'),totals=Object.fromEntries(KEY_ORDER.map(k=>[k,0]));let grand=0;
-  const rows=[...byExercise.entries()].sort((a,b)=>a[0].localeCompare(b[0],undefined,{numeric:true}));
-  for(const [name,counts] of rows){
-    const tr=document.createElement('tr'),sum=[...counts.values()].reduce((a,b)=>a+b,0);grand+=sum;
-    for(const value of [name,sum,...KEY_ORDER.map(k=>{const v=counts.get(k)||0;totals[k]+=v;return v||'';})]){
-      const td=document.createElement('td');td.textContent=value;tr.append(td);
+
+  // Support earlier Magnificat records containing
+  // a tonic without "major" or "minor".
+
+  if (item.app === 'magnificat-fugues') {
+    const mode = Number(
+      item.mode ||
+      String(item.modelId || '')
+        .match(/^mode(\d+)/)?.[1]
+    );
+
+    if (mode >= 1 && mode <= 8) {
+      return keyFromTonic(cleaned, mode <= 4);
     }
+  }
+
+  return null;
+}
+
+
+// Obtain the same trainer tabs as the main website.
+
+async function getSharedNavigation() {
+  if (sharedNavigationCache) {
+    return sharedNavigationCache;
+  }
+
+  const get = async path => {
+    const response = await fetch(
+      SHARED_TRAINER_BASE + path
+    );
+
+    if (!response.ok) {
+      throw new Error('Could not load ' + path);
+    }
+
+    return response.json();
+  };
+
+  const landing = await get('landing/models.json');
+  const nav = [];
+
+  for (const entry of landing.models) {
+
+    if (entry.type === 'collection') {
+      const path = SHARED_COLLECTIONS[
+        entry.collection
+      ];
+
+      if (!path) continue;
+
+      const collection = await get(path);
+
+      nav.push({
+        title: entry.title,
+        subtabs: collection.items.map(item => ({
+          title: item.title,
+          id: item.model
+        }))
+      });
+
+    } else if (entry.type === 'model') {
+      nav.push({
+        title: entry.title,
+        id: entry.model,
+        subtabs: []
+      });
+
+    } else if (
+      entry.type === 'external' &&
+      entry.url?.includes('/magnificat-fugues/')
+    ) {
+      nav.push({
+        title: 'Pachelbel Magnificat Fugues',
+        id: 'magnificat-fugues',
+        subtabs: []
+      });
+    }
+  }
+
+  // Ensure Magnificat is available even if the
+  // main landing catalog has not yet added it.
+
+  if (!nav.some(n => n.id === 'magnificat-fugues')) {
+    nav.push({
+      title: 'Pachelbel Magnificat Fugues',
+      id: 'magnificat-fugues',
+      subtabs: []
+    });
+  }
+
+  sharedNavigationCache = nav;
+  return nav;
+}
+
+
+// Original Venetian-style tab buttons.
+
+function addButton(parent, label, selected, fn) {
+  const btn = document.createElement('button');
+
+  btn.type = 'button';
+  btn.className =
+    'pa-tab' + (selected ? ' pa-active' : '');
+
+  btn.textContent = label;
+  btn.setAttribute(
+    'aria-pressed',
+    String(selected)
+  );
+
+  btn.onclick = fn;
+  parent.append(btn);
+}
+
+
+// Shared numerical practice-history grid.
+
+function drawGrid(host, attempts, models) {
+  const isMagnificat = models.some(
+    m => m.id === 'magnificat-fugues'
+  );
+
+  const allowed = new Set(
+    models.map(m => m.id)
+  );
+
+  const names = new Map(
+    models.map(m => [m.id, m.title])
+  );
+
+  const byExercise = new Map();
+  let skipped = 0;
+
+  for (const item of attempts) {
+    const fugueRecord =
+      item.app === 'magnificat-fugues';
+
+    if (isMagnificat !== fugueRecord) {
+      continue;
+    }
+
+    const minimum = fugueRecord ? 90 : 60;
+
+    if (Number(item.durationSeconds) < minimum) {
+      continue;
+    }
+
+    let exercise;
+
+    if (fugueRecord) {
+      exercise = String(
+        item.exercise || item.modelId || ''
+      ).trim();
+
+      if (!exercise) {
+        skipped++;
+        continue;
+      }
+
+    } else {
+      const id =
+        item.modelId ||
+        models.find(m =>
+          m.title.toLowerCase() ===
+          String(item.model || '').toLowerCase()
+        )?.id;
+
+      if (!allowed.has(id)) continue;
+
+      const name =
+        names.get(id) || item.model || id;
+
+      exercise =
+        `${name} — ${item.exercise || 'Unknown phrase'}`;
+    }
+
+    const key = historyKey(item);
+
+    if (!key) {
+      skipped++;
+      continue;
+    }
+
+    if (!byExercise.has(exercise)) {
+      byExercise.set(exercise, new Map());
+    }
+
+    const counts = byExercise.get(exercise);
+
+    counts.set(
+      key,
+      (counts.get(key) || 0) + 1
+    );
+  }
+
+  if (!byExercise.size) {
+    const message = document.createElement('p');
+
+    message.textContent = isMagnificat
+      ? 'No recorded Magnificat fugues yet.'
+      : 'No recorded phrases for this selection.';
+
+    host.append(message);
+    return;
+  }
+
+  const wrap = document.createElement('div');
+  wrap.className = 'pa-grid-scroll';
+
+  const table = document.createElement('table');
+  table.className = 'pa-grid';
+
+  const header = document.createElement('thead');
+  const headerRow = document.createElement('tr');
+
+  for (const label of [
+    'Exercise',
+    'Totals',
+    ...KEY_ORDER.map(niceKey)
+  ]) {
+    const th = document.createElement('th');
+    th.textContent = label;
+    headerRow.append(th);
+  }
+
+  header.append(headerRow);
+  table.append(header);
+
+  const body = document.createElement('tbody');
+
+  const totals = Object.fromEntries(
+    KEY_ORDER.map(key => [key, 0])
+  );
+
+  let grand = 0;
+
+  const rows = [...byExercise.entries()].sort(
+    (a, b) => a[0].localeCompare(
+      b[0],
+      undefined,
+      { numeric: true }
+    )
+  );
+
+  for (const [name, counts] of rows) {
+    const tr = document.createElement('tr');
+
+    const sum = [...counts.values()].reduce(
+      (a, b) => a + b,
+      0
+    );
+
+    grand += sum;
+
+    const values = [
+      name,
+      sum,
+      ...KEY_ORDER.map(key => {
+        const count = counts.get(key) || 0;
+        totals[key] += count;
+        return count || '';
+      })
+    ];
+
+    for (const value of values) {
+      const td = document.createElement('td');
+      td.textContent = value;
+      tr.append(td);
+    }
+
     body.append(tr);
   }
-  const totalRow=document.createElement('tr');totalRow.className='pa-total-row';
-  for(const value of ['Totals',grand,...KEY_ORDER.map(k=>totals[k]||'')]){
-    const td=document.createElement('td');td.textContent=value;totalRow.append(td);
+
+  const totalRow = document.createElement('tr');
+  totalRow.className = 'pa-total-row';
+
+  for (const value of [
+    'Totals',
+    grand,
+    ...KEY_ORDER.map(key => totals[key] || '')
+  ]) {
+    const td = document.createElement('td');
+    td.textContent = value;
+    totalRow.append(td);
   }
-  body.prepend(totalRow);table.append(body);wrap.append(table);host.append(wrap);
-  if(skipped){const note=document.createElement('p');note.className='pa-note';note.textContent=`${skipped} attempt(s) had an unrecognized key and are not included.`;host.append(note);}
+
+  body.prepend(totalRow);
+  table.append(body);
+  wrap.append(table);
+  host.append(wrap);
+
+  if (skipped) {
+    const note = document.createElement('p');
+    note.className = 'pa-note';
+
+    note.textContent =
+      `${skipped} attempt(s) had unrecognized data and are not included.`;
+
+    host.append(note);
+  }
 }
-async function loadHistory(){
-  const area=el('pa-history-body'),uid=localStorage.getItem(UID_KEY);
-  if(!uid){area.textContent='Please log in first.';return;}
-  area.textContent='Loading practice history...';
-  try{
-    await auth.authStateReady();if(!auth.currentUser)throw Error('Not authenticated');
-    const [catalog,snapshot]=await Promise.all([
-      fetch('tunes/index.json').then(r=>{if(!r.ok)throw Error('Could not load fugue catalog');return r.json();}),
-      getDocs(collection(db,'users',uid,'webPractice'))
+
+
+// Display all trainer histories from shared Firebase.
+
+async function loadHistory() {
+  const area = el('pa-history-body');
+  const uid = localStorage.getItem(UID_KEY);
+
+  if (!uid) {
+    area.textContent = 'Please log in first.';
+    return;
+  }
+
+  area.textContent = 'Loading practice history...';
+
+  try {
+    await auth.authStateReady();
+
+    if (!auth.currentUser) {
+      throw Error('Not authenticated');
+    }
+
+    const [nav, snapshot] = await Promise.all([
+      getSharedNavigation(),
+      getDocs(
+        collection(db, 'users', uid, 'webPractice')
+      )
     ]);
-    if(localStorage.getItem(UID_KEY)!==uid){area.textContent='Student changed; reopen history.';return;}
-    const attempts=snapshot.docs.map(d=>d.data()).filter(x=>x.app===APP_ID);
-    const nav=Array.from({length:8},(_,i)=>({
-      title:'Mode '+['I','II','III','IV','V','VI','VII','VIII'][i],
-      subtabs:catalog.filter(f=>Number(f.mode)===i+1).map(f=>({title:f.title,id:f.id}))
-    }));
-    let activeLanding=Math.max(0,Math.min(7,Number(selectedDetail?.mode||1)-1)),activeSub=null;
-    const render=()=>{
+
+    if (localStorage.getItem(UID_KEY) !== uid) {
+      area.textContent =
+        'Student changed; reopen history.';
+      return;
+    }
+
+    const attempts = snapshot.docs
+      .map(d => d.data())
+      .filter(item =>
+        item.app === 'improvisation-models' ||
+        item.app === 'magnificat-fugues'
+      );
+
+    // Magnificat is selected by default.
+
+    const initialIndex = nav.findIndex(
+      n => n.id === 'magnificat-fugues'
+    );
+
+    let activeLanding = Math.max(0, initialIndex);
+    let activeSub = null;
+
+    const renderHistory = () => {
       area.replaceChildren();
-      const tabs=document.createElement('div');tabs.className='pa-tabs';
-      nav.forEach((n,i)=>addButton(tabs,n.title,i===activeLanding,()=>{activeLanding=i;activeSub=null;render();}));
+
+      const tabs = document.createElement('div');
+      tabs.className = 'pa-tabs';
+
+      nav.forEach((item, index) => {
+        addButton(
+          tabs,
+          item.title,
+          index === activeLanding,
+          () => {
+            activeLanding = index;
+            activeSub = null;
+            renderHistory();
+          }
+        );
+      });
+
       area.append(tabs);
-      const landing=nav[activeLanding];
-      const sub=document.createElement('div');sub.className='pa-subtabs';
-      addButton(sub,'All fugues',activeSub===null,()=>{activeSub=null;render();});
-      landing.subtabs.forEach((s,i)=>addButton(sub,s.title,activeSub===i,()=>{activeSub=i;render();}));
-      area.append(sub);
-      const models=activeSub===null?landing.subtabs:[landing.subtabs[activeSub]];
-      drawGrid(area,attempts,models);
+
+      const landing = nav[activeLanding];
+      if (!landing) return;
+
+      let models;
+
+      if (landing.subtabs.length) {
+        const subtabs = document.createElement('div');
+        subtabs.className = 'pa-subtabs';
+
+        addButton(
+          subtabs,
+          'All models',
+          activeSub === null,
+          () => {
+            activeSub = null;
+            renderHistory();
+          }
+        );
+
+        landing.subtabs.forEach((item, index) => {
+          addButton(
+            subtabs,
+            item.title,
+            activeSub === index,
+            () => {
+              activeSub = index;
+              renderHistory();
+            }
+          );
+        });
+
+        area.append(subtabs);
+
+        models = activeSub === null
+          ? landing.subtabs
+          : [landing.subtabs[activeSub]];
+
+      } else {
+        models = [landing];
+      }
+
+      drawGrid(area, attempts, models);
     };
-    render();
-  }catch(e){console.error(e);area.textContent='Could not load practice history (' + (e.code || e.message || 'unknown error') + ').';}
+
+    renderHistory();
+
+  } catch (error) {
+    console.error(error);
+
+    area.textContent =
+      'Could not load practice history (' +
+      (error.code || error.message || 'unknown error') +
+      ').';
+  }
 }
+
 
 // If the app finished its initial load before this ES module initialized,
 // recover the already-rendered selection without restarting it later.
