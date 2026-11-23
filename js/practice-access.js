@@ -47,45 +47,146 @@ let selectedDetail=null;
 const elapsed=a=>Math.min(CAP,Math.max(0,Math.floor(((a.endedAt||Date.now())-a.startedAt)/1000)));
 function cancelCreditTimer(){if(creditTimer!==null){clearTimeout(creditTimer);creditTimer=null;}}
 function enqueue(work){queue=queue.then(work).catch(e=>console.error('Practice save failed',e));return queue;}
-async function saveQualifiedAttempt(a){
-  if(a.saved||elapsed(a)<MIN_SECONDS)return;
-  await auth.authStateReady();
-  if(!auth.currentUser)return;
-  const seconds=elapsed(a);
-  const ref=await addDoc(collection(db,'users',a.uid,'webPractice'),{
-    app:APP_ID,model:'Pachelbel Magnificat Fugues',modelId:a.detail.id,
-    exercise:a.detail.title,mode:a.detail.mode,
-    key:a.startKey,startedAt:serverTimestamp(),durationSeconds:seconds
-  });
-  a.saved=ref.id;
-}
-async function finalize(a){
-  if(!a||elapsed(a)<MIN_SECONDS)return;
-  await saveQualifiedAttempt(a);
-  if(a.saved){
-    await updateDoc(doc(db,'users',a.uid,'webPractice',a.saved),{
-      durationSeconds:elapsed(a)
-    });
+
+async function saveQualifiedAttempt(a) {
+  if (
+    !a ||
+    a.saved ||
+    a.saving ||
+    elapsed(a) < MIN_SECONDS
+  ) return;
+
+  a.saving = true;
+
+  try {
+    await auth.authStateReady();
+
+    if (!auth.currentUser) {
+      throw new Error('Firebase authentication unavailable');
+    }
+
+    const seconds = elapsed(a);
+
+    const ref = await addDoc(
+      collection(db, 'users', a.uid, 'webPractice'),
+      {
+        app: APP_ID,
+        model: 'Pachelbel Magnificat Fugues',
+        modelId: a.detail.id,
+        exercise: a.detail.title,
+        mode: a.detail.mode,
+        key: a.startKey + ' ' +
+          (a.detail.mode <= 4 ? 'minor' : 'major'),
+        startedAt: serverTimestamp(),
+        durationSeconds: seconds
+      }
+    );
+
+    a.saved = ref.id;
+
+    console.log(
+      'Magnificat practice saved:',
+      a.detail.title,
+      seconds,
+      'seconds'
+    );
+
+  } catch (error) {
+    console.error(
+      'Magnificat practice write failed:',
+      error
+    );
+  } finally {
+    a.saving = false;
   }
 }
-function stopAttempt(){
+
+async function finalize(a) {
+  if (!a || elapsed(a) < MIN_SECONDS) return;
+
+  // Finish any pending first write before updating.
+  if (a.saving) {
+    await a.savingPromise;
+  }
+
+  if (!a.saved) {
+    await saveQualifiedAttempt(a);
+  }
+
+  if (a.saved) {
+    try {
+      await updateDoc(
+        doc(db, 'users', a.uid, 'webPractice', a.saved),
+        { durationSeconds: elapsed(a) }
+      );
+    } catch (error) {
+      console.error(
+        'Could not finalize Magnificat practice:',
+        error
+      );
+    }
+  }
+}
+
+function stopAttempt() {
   cancelCreditTimer();
-  const a=activeAttempt;activeAttempt=null;
-  if(!a)return;
-  a.endedAt=Date.now();
-  enqueue(()=>finalize(a));
+
+  const a = activeAttempt;
+  activeAttempt = null;
+
+  if (!a) return;
+
+  a.endedAt = Date.now();
+
+  enqueue(() => finalize(a));
 }
-function startForSelected(){
-  const uid=localStorage.getItem(UID_KEY);
-  if(!uid||!ready||!selectedDetail||document.visibilityState!=='visible')return;
-  if(activeAttempt&&activeAttempt.uid===uid&&activeAttempt.detail.id===selectedDetail.id)return;
+
+function startForSelected() {
+  const uid = localStorage.getItem(UID_KEY);
+
+  if (
+    !uid ||
+    !ready ||
+    !selectedDetail ||
+    document.visibilityState !== 'visible'
+  ) return;
+
+  // Changing key does not restart the same fugue.
+  if (
+    activeAttempt &&
+    activeAttempt.uid === uid &&
+    activeAttempt.detail.id === selectedDetail.id
+  ) return;
+
   stopAttempt();
-  const a={uid,detail:{...selectedDetail},startKey:document.getElementById('key')?.value||'',startedAt:Date.now(),saved:null};
-  activeAttempt=a;
-  creditTimer=setTimeout(()=>{
-    if(activeAttempt===a)enqueue(()=>saveQualifiedAttempt(a));
-  },MIN_SECONDS*1000);
+
+  const a = {
+    uid,
+    detail: { ...selectedDetail },
+    startKey: document.getElementById('key')?.value || '',
+    startedAt: Date.now(),
+    endedAt: null,
+    saved: null,
+    saving: false,
+    savingPromise: null
+  };
+
+  activeAttempt = a;
+
+  console.log(
+    'Magnificat practice started:',
+    a.detail.title
+  );
+
+  creditTimer = setTimeout(() => {
+    if (activeAttempt !== a) return;
+
+    a.savingPromise = enqueue(
+      () => saveQualifiedAttempt(a)
+    );
+  }, MIN_SECONDS * 1000);
 }
+
 window.addEventListener('magnificat:fugue',event=>{
   const d=event.detail;
   if(!d?.id)return;
