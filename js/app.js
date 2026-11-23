@@ -605,7 +605,58 @@ async function render(id, text, isForeground = false) {
 
 
 
-async function load() { const selected = $('fugue').value; const info = fugues.find(f => f.id === selected) || fugues[0]; const base = `tunes/${info.id}`; const paths = [`${base}-subject.krn`, `${base}-answer.krn`, `${base}.krn`]; const texts = await Promise.all(paths.map(p => fetch(p).then(r => { if (!r.ok) throw Error('Cannot load ' + p); return r.text() }))); sourceTexts = { subjectScore: texts[0], answerScore: texts[1], foregroundScore: texts[2] }; current = parseFugue(texts[2]); current.id = info.id; $('modeDisplay').textContent = metadataTitle(texts[2]); updateKeyOptions(Number(info.mode)); hideAnswer(); await refresh(); updateHero() }
+
+async function load() {
+  const selected = $('fugue').value;
+  const info = fugues.find(f => f.id === selected) || fugues[0];
+
+  if (!info) return;
+
+  const base = `tunes/${info.id}`;
+  const paths = [
+    `${base}-subject.krn`,
+    `${base}-answer.krn`,
+    `${base}.krn`
+  ];
+
+  const texts = await Promise.all(
+    paths.map(async path => {
+      const response = await fetch(path);
+      if (!response.ok) {
+        throw Error('Cannot load ' + path);
+      }
+      return response.text();
+    })
+  );
+
+  sourceTexts = {
+    subjectScore: texts[0],
+    answerScore: texts[1],
+    foregroundScore: texts[2]
+  };
+
+  current = parseFugue(texts[2]);
+  current.id = info.id;
+
+  $('modeDisplay').textContent = metadataTitle(texts[2]);
+
+  updateKeyOptions(Number(info.mode));
+  hideAnswer();
+
+  await refresh();
+  updateHero();
+
+  // Notify the practice tracker only after the fugue
+  // has successfully loaded.
+  window.dispatchEvent(new CustomEvent('magnificat:fugue', {
+    detail: {
+      id: info.id,
+      title: info.title || metadataTitle(texts[2]),
+      mode: Number(info.mode)
+    }
+  }));
+}
+
 function hideAnswer() { $('answerScore').classList.add('hidden'); $('answerScore').setAttribute('aria-hidden', 'true'); $('answerToggle').classList.remove('revealed'); $('answerToggle').textContent = 'Show answer' }
 async function refresh() { if (!current) return; map(); catalog(); await render('subjectScore', sourceTexts.subjectScore); await render('answerScore', sourceTexts.answerScore); if ($('foreground').open) await render('foregroundScore', sourceTexts.foregroundScore, true) }
 $('answerToggle').addEventListener('click', () => { const hidden = $('answerScore').classList.toggle('hidden'); $('answerScore').setAttribute('aria-hidden', String(hidden)); $('answerToggle').classList.toggle('revealed', !hidden); $('answerToggle').textContent = hidden ? 'Show answer' : 'Hide answer' });
