@@ -204,7 +204,25 @@ window.addEventListener('pagehide',stopAttempt);
 // The only domain-specific change is that the navigation represents fugue modes.
 const KEY_ORDER=['C','G','D','A','E','B','F#','C#','F','Bb','Eb','Ab','Db','Gb','Cb',
   'a','e','b','f#','c#','g#','d#','a#','d','g','c','f','bb','eb','ab'];
-const niceKey=k=>String(k||'').replace(/#/g,'♯').replace(/b/g,'♭');
+
+
+const niceKey = key => {
+  const value = String(key || '').trim();
+  const match = value.match(/^([A-Ga-g])([#♯b♭]?)(.*)$/);
+
+  if (!match) return value;
+
+  const [, letter, accidental, suffix] = match;
+
+  const formattedAccidental =
+    accidental === '#' ? '♯' :
+    accidental === 'b' ? '♭' :
+    accidental;
+
+  return letter + formattedAccidental + suffix;
+};
+
+
 const keyFromTonic=(tonic,minor)=>{
   if(!tonic)return null;
   const m=String(tonic).trim().replace(/♯/g,'#').replace(/♭/g,'b').match(/^([A-Ga-g])([#b]?)$/);
