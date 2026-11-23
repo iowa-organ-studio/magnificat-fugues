@@ -9,5 +9,11 @@
     "id": "mode5fugue1",
     "title": "Mode V Fugue 1",
     "mode": 5
+  },
+
+   {
+    "id": "mode6fugue1",
+    "title": "Mode VI Fugue 1",
+    "mode": 6
   }
 ]

@@ -171,7 +171,133 @@ function active(v, t) {
 }
 
 function catalog() { let html = ''; for (const [voice, label] of [['S', 'Soprano'], ['A', 'Alto'], ['T', 'Tenor'], ['B', 'Bass']]) { const entries = current.voices[voice].entries; html += `<div class="voice-card"><h3>${label}</h3><div class="chips">`; for (const e of entries) { const t = e.start + .001, order = ['S', 'A', 'T', 'B'], on = order.filter(k => active(current.voices[k], t)), lowest = on[on.length - 1] === voice; html += `<span class="chip ${e.type === 'answer' ? 'answer' : ''}" title="${e.type} · beat ${e.start + 1} · ${transposeName(e.pitch, $('key').value)}">${on.length}v${on.length > 1 && lowest ? ' ↓' : ''}</span>` } html += '</div></div>' } $('catalog').innerHTML = html }
-function map() { const w = 1220, left = 52, right = 14, top = 32, row = 48, total = Math.min(current.measures * 4, current.availableBeats), px = t => left + (w - left - right) * t / total; let out = `<svg viewBox="0 0 ${w} 285" role="img" aria-label="Four voice fugue map">`; for (let m = 1; (m - 1) * 4 <= total; m += 2) { const x = px((m - 1) * 4); out += `<line x1="${x}" y1="24" x2="${x}" y2="231" stroke="#ececec"/><text x="${x}" y="253" font-size="12" fill="#666" text-anchor="middle">${m}</text>` } for (const [i, v] of ['S', 'A', 'T', 'B'].entries()) { const y = top + i * row + 20, voice = current.voices[v]; out += `<text x="12" y="${y + 5}" font-size="17" font-weight="700">${v}</text>`; const breaks = new Set([0, total]); for (const e of voice.entries) { breaks.add(e.start); breaks.add(e.end) } for (const [a, b] of voice.rests) { breaks.add(a); breaks.add(b) } const pts = [...breaks].sort((a, b) => a - b); for (let j = 0; j < pts.length - 1; j++) { const a = pts[j], b = pts[j + 1], mid = (a + b) / 2; if (!active(voice, mid)) continue; const entry = voice.entries.find(e => mid >= e.start && mid < e.end); const x = px(a), width = px(b) - x; if (entry) { out += `<rect x="${x}" y="${y - 17}" width="${width}" height="34" rx="5" fill="${entry.type === 'subject' ? '#ffcd00' : '#fff5cc'}" stroke="#b69a20" stroke-width="1.4"/><text x="${x + width / 2}" y="${y + 6}" text-anchor="middle" font-size="18" font-weight="700">${transposeName(entry.pitch, $('key').value)}</text>` } else { const n = Math.floor(width / 12); if (n > 0) { let path = `M${x} ${y}`; for (let z = 0; z < n; z++)path += ` q3 -7 6 0 t6 0`; out += `<path d="${path}" fill="none" stroke="#66798d" stroke-width="2.1"/>` } } } } out += `</svg>`; $('map').innerHTML = out }
+
+function map() {
+  const w = 1220;
+  const left = 52;
+  const right = 14;
+  const top = 32;
+  const row = 48;
+
+  const total = Math.min(
+    current.measures * 4,
+    current.availableBeats
+  );
+
+  const px = t =>
+    left + (w - left - right) * t / total;
+
+  let out = `<svg viewBox="0 0 ${w} 285"
+    role="img" aria-label="Four voice fugue map">`;
+
+  // Measure lines and numbers.
+  for (let m = 1; (m - 1) * 4 <= total; m += 2) {
+    const x = px((m - 1) * 4);
+
+    out += `
+      <line x1="${x}" y1="24"
+        x2="${x}" y2="231"
+        stroke="#ececec"/>
+      <text x="${x}" y="253"
+        font-size="12" fill="#666"
+        text-anchor="middle">${m}</text>`;
+  }
+
+  for (const [i, v] of ['S', 'A', 'T', 'B'].entries()) {
+    const y = top + i * row + 20;
+    const voice = current.voices[v];
+
+    out += `
+      <text x="12" y="${y + 5}"
+        font-size="17"
+        font-weight="700">${v}</text>`;
+
+    const breaks = new Set([0, total]);
+
+    for (const e of voice.entries) {
+      breaks.add(e.start);
+      breaks.add(e.end);
+    }
+
+    for (const [a, b] of voice.rests) {
+      breaks.add(a);
+      breaks.add(b);
+    }
+
+    const pts = [...breaks].sort((a, b) => a - b);
+
+    for (let j = 0; j < pts.length - 1; j++) {
+      const a = pts[j];
+      const b = pts[j + 1];
+      const mid = (a + b) / 2;
+
+      if (!active(voice, mid)) continue;
+
+      const entry = voice.entries.find(
+        e => mid >= e.start && mid < e.end
+      );
+
+      const x = px(a);
+      const width = px(b) - x;
+
+      if (entry) {
+        // Subject or answer rectangle.
+        out += `
+          <rect x="${x}" y="${y - 17}"
+            width="${width}" height="34"
+            rx="5"
+            fill="${entry.type === 'subject'
+              ? '#ffcd00'
+              : '#fff5cc'}"
+            stroke="#b69a20"
+            stroke-width="1.4"/>
+
+          <text x="${x + width / 2}"
+            y="${y + 6}"
+            text-anchor="middle"
+            font-size="18"
+            font-weight="700">
+            ${transposeName(entry.pitch, $('key').value)}
+          </text>`;
+
+      } else {
+        // Counterpoint interval.
+        // Suppress short gaps immediately before an entry.
+
+        const nextEntry = voice.entries.find(
+          e => Math.abs(e.start - b) < 0.0001
+        );
+
+        const shortPreEntryGap =
+          nextEntry !== undefined &&
+          (b - a) <= 1.0001;
+
+        if (shortPreEntryGap) continue;
+
+        // Original counterpoint-wave rendering.
+        const n = Math.floor(width / 12);
+
+        if (n > 0) {
+          let path = `M${x} ${y}`;
+
+          for (let z = 0; z < n; z++) {
+            path += ` q3 -7 6 0 t6 0`;
+          }
+
+          out += `
+            <path d="${path}"
+              fill="none"
+              stroke="#66798d"
+              stroke-width="2.1"/>`;
+        }
+      }
+    }
+  }
+
+  out += `</svg>`;
+  $('map').innerHTML = out;
+}
+
 // Remove only reference records from the rendering copy. The source .krn files
 // and their metadata remain intact for the app's title, mode, and indexing.
 function stripDisplayMetadata(text) {

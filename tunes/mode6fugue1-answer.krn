@@ -1,0 +1,23 @@
+!!!COM: Pachelbel, Johann
+!!!OTL: Fugue Answer
+!!!OMD: Mode VI
+!!!FUG: 1
+!!!KEY: F major
+!!!MTR: 4/4
+**kern
+*M4/4
+*clefG2
+*k[b-]
+*F:
+=1
+2cc
+4a
+4f
+=2
+4b-
+4a
+2g
+=3
+2f
+=||
+*-
