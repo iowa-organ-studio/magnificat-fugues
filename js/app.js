@@ -19,20 +19,67 @@ const minorKeys = [
   { name: 'A♭', signature: -7 }
 ];
 const keys = [...new Set([...majorKeys, ...minorKeys].map(k => k.name))];
-const modeIsMinor = mode => Number(mode) >= 1 && Number(mode) <= 4;
-const inventoryForMode = mode => modeIsMinor(mode) ? minorKeys : majorKeys;
-const selectedFugue = () => fugues.find(f => f.id === $('fugue').value) || fugues[0];
-const currentMode = () => Number(selectedFugue()?.mode || metadata(sourceTexts.foregroundScore || '', 'OMD').match(/\d+/)?.[0] || 2);
-function eligibleKeys(mode = currentMode()) {
-  return inventoryForMode(mode).filter(k => allowedCounts.has(Math.abs(k.signature))).map(k => k.name);
+
+function tonalityFromKrn(text) {
+  const match = metadata(text, 'KEY').match(
+    /^([A-Ga-g][#♯b♭]?)\s+(major|minor)$/i
+  );
+
+  if (!match) {
+    throw new Error(
+      'Missing or invalid !!!KEY: metadata. Expected, for example, C minor.'
+    );
+  }
+
+  return match[2].toLowerCase();
 }
-function updateKeyOptions(mode = currentMode(), preferred = null) {
-  const select = $('key'), previous = preferred ?? select.value, inventory = inventoryForMode(mode);
-  select.innerHTML = inventory.map(k => `<option value="${k.name}">${k.name}</option>`).join('');
-  if (inventory.some(k => k.name === previous)) select.value = previous;
-  else if (inventory.some(k => pc[k.name] === pc[previous])) select.value = inventory.find(k => pc[k.name] === pc[previous]).name;
-  else select.value = eligibleKeys(mode)[0] || inventory[0].name;
+
+function inventoryForFugue(fugue = selectedFugue()) {
+  if (!fugue?.tonality) {
+    throw new Error('Fugue tonality has not been loaded.');
+  }
+
+  return fugue.tonality === 'minor'
+    ? minorKeys
+    : majorKeys;
 }
+
+const selectedFugue = () =>
+  fugues.find(f => f.id === $('fugue').value) || fugues[0];
+
+const currentMode = () => Number(selectedFugue()?.mode || 0);
+
+function eligibleKeys(fugue = selectedFugue()) {
+  return inventoryForFugue(fugue)
+    .filter(k => allowedCounts.has(Math.abs(k.signature)))
+    .map(k => k.name);
+}
+
+function updateKeyOptions(fugue = selectedFugue(), preferred = null) {
+  const select = $('key');
+  const previous = preferred ?? select.value;
+  const inventory = inventoryForFugue(fugue);
+  const available = eligibleKeys(fugue);
+
+  select.innerHTML = inventory
+    .map(k => `<option value="${k.name}">${k.name}</option>`)
+    .join('');
+
+  if (inventory.some(k => k.name === previous)) {
+    select.value = previous;
+  } else {
+    const enharmonic = inventory.find(
+      k => pc[k.name] === pc[previous]
+    );
+
+    if (enharmonic) {
+      select.value = enharmonic.name;
+    } else {
+      select.value = available[0] || inventory[0].name;
+    }
+  }
+}
+
 const alternate = { 'C♯': 'D♭', 'D♭': 'C♯', 'E♭': 'D♯', 'D♯': 'E♭', 'F♯': 'G♭', 'G♭': 'F♯', 'A♭': 'G♯', 'G♯': 'A♭', 'B♭': 'A♯', 'A♯': 'B♭' };
 const pc = { C: 0, 'C♯': 1, 'D♭': 1, D: 2, 'D♯': 3, 'E♭': 3, E: 4, F: 5, 'F♯': 6, 'G♭': 6, G: 7, 'G♯': 8, 'A♭': 8, A: 9, 'A♯': 10, 'B♭': 10, B: 11, 'C♭': 11, 'E♯': 5, 'B♯': 0, 'F♭': 4 };
 let fugues = [], current = null, tk = null, scale = 42, space = .5, sourceTexts = {};
@@ -247,8 +294,8 @@ function map() {
             width="${width}" height="34"
             rx="5"
             fill="${entry.type === 'subject'
-              ? '#ffcd00'
-              : '#fff5cc'}"
+            ? '#ffcd00'
+            : '#fff5cc'}"
             stroke="#b69a20"
             stroke-width="1.4"/>
 
@@ -622,12 +669,13 @@ async function load() {
   const texts = await Promise.all(
     paths.map(async path => {
       const response = await fetch(path);
-      if (!response.ok) {
-        throw Error('Cannot load ' + path);
-      }
+      if (!response.ok) throw Error('Cannot load ' + path);
       return response.text();
     })
   );
+
+  // The full fugue score determines major/minor.
+  info.tonality = tonalityFromKrn(texts[2]);
 
   sourceTexts = {
     subjectScore: texts[0],
@@ -640,22 +688,23 @@ async function load() {
 
   $('modeDisplay').textContent = metadataTitle(texts[2]);
 
-  updateKeyOptions(Number(info.mode));
+  updateKeyOptions(info);
   hideAnswer();
 
   await refresh();
   updateHero();
 
-  // Notify the practice tracker only after the fugue
-  // has successfully loaded.
   window.dispatchEvent(new CustomEvent('magnificat:fugue', {
     detail: {
       id: info.id,
       title: info.title || metadataTitle(texts[2]),
-      mode: Number(info.mode)
+      mode: Number(info.mode),
+      tonality: info.tonality
     }
   }));
 }
+
+
 
 function hideAnswer() { $('answerScore').classList.add('hidden'); $('answerScore').setAttribute('aria-hidden', 'true'); $('answerToggle').classList.remove('revealed'); $('answerToggle').textContent = 'Show answer' }
 async function refresh() { if (!current) return; map(); catalog(); await render('subjectScore', sourceTexts.subjectScore); await render('answerScore', sourceTexts.answerScore); if ($('foreground').open) await render('foregroundScore', sourceTexts.foregroundScore, true) }
@@ -664,26 +713,127 @@ $('foreground').addEventListener('toggle', () => { $('foregroundHint').textConte
 $('key').addEventListener('change', refresh); $('fugue').addEventListener('change', load);
 function eligibleFugues() { return fugues.filter(f => selectedModes.has(Number(f.mode))) }
 function noFugue() { $('status').textContent = 'No fugue found'; $('modeDisplay').textContent = 'No fugue found'; $('catalog').textContent = 'No fugue found'; $('map').textContent = 'No fugue found'; for (const id of ['subjectScore', 'answerScore', 'foregroundScore']) $(id).textContent = ''; current = null; sourceTexts = {}; }
-$('random').addEventListener('click', async () => { const pool = eligibleFugues(); if (!pool.length || !pool.some(f => eligibleKeys(f.mode).length)) { noFugue(); return } const chosen = pool[Math.floor(Math.random() * pool.length)]; const modeKeys = eligibleKeys(chosen.mode); if (!modeKeys.length) { noFugue(); return } $('fugue').value = chosen.id; updateKeyOptions(chosen.mode); $('key').value = modeKeys[Math.floor(Math.random() * modeKeys.length)]; await load() });
+
+$('random').addEventListener('click', async () => {
+  // First filter by the enabled Mode I-VIII buttons.
+  const pool = eligibleFugues().filter(
+    f => eligibleKeys(f).length > 0
+  );
+
+  if (!pool.length) {
+    noFugue();
+    return;
+  }
+
+  // Choose randomly among fugues in enabled modes.
+  const chosen = pool[
+    Math.floor(Math.random() * pool.length)
+  ];
+
+  // Choose a key from this fugue's own major/minor inventory.
+  const available = eligibleKeys(chosen);
+
+  $('fugue').value = chosen.id;
+  updateKeyOptions(chosen);
+
+  $('key').value = available[
+    Math.floor(Math.random() * available.length)
+  ];
+
+  await load();
+});
+
 for (const [id, delta, which] of [['scaleDown', -3, 'scale'], ['scaleUp', 3, 'scale'], ['spaceDown', -.1, 'space'], ['spaceUp', .1, 'space']]) $(id).addEventListener('click', () => { if (which === 'scale') { scale = Math.max(20, Math.min(75, scale + delta)); $('scaleValue').textContent = scale } else { space = Math.max(.1, Math.min(1.5, Math.round((space + delta) * 100) / 100)); $('spaceValue').textContent = space.toFixed(2) } render('foregroundScore', sourceTexts.foregroundScore, true) });
-(async () => { try { fugues = await fetch('tunes/index.json').then(r => r.json()); $('fugue').innerHTML = fugues.map(f => `<option value="${f.id}">${f.title}</option>`).join(''); updateKeyOptions(2); const pool = eligibleFugues(); if (!pool.length || !pool.some(f => eligibleKeys(f.mode).length)) { noFugue(); return } const chosen = pool[Math.floor(Math.random() * pool.length)]; const modeKeys = eligibleKeys(chosen.mode); if (!modeKeys.length) { noFugue(); return } $('fugue').value = chosen.id; updateKeyOptions(chosen.mode); $('key').value = modeKeys[Math.floor(Math.random() * modeKeys.length)]; await load(); $('status').textContent = 'Loaded annotated Humdrum fugue.' } catch (err) { $('status').textContent = 'Load error: ' + err.message; $('subjectScore').textContent = 'Load error: ' + err.message; console.error(err) } })();
+
+(async () => {
+  try {
+    fugues = await fetch('tunes/index.json').then(async r => {
+      if (!r.ok) throw Error('Cannot load tunes/index.json');
+      return r.json();
+    });
+
+    // Read major/minor from each fugue's !!!KEY: metadata.
+    await Promise.all(fugues.map(async f => {
+      const response = await fetch(`tunes/${f.id}.krn`);
+
+      if (!response.ok) {
+        throw Error(`Cannot load tunes/${f.id}.krn`);
+      }
+
+      const text = await response.text();
+      f.tonality = tonalityFromKrn(text);
+    }));
+
+    $('fugue').innerHTML = fugues.map(
+      f => `<option value="${f.id}">${f.title}</option>`
+    ).join('');
+
+    // Respect enabled mode buttons AND key-signature filters.
+    const pool = eligibleFugues().filter(
+      f => eligibleKeys(f).length > 0
+    );
+
+    if (!pool.length) {
+      noFugue();
+      return;
+    }
+
+    const chosen = pool[Math.floor(Math.random() * pool.length)];
+    const available = eligibleKeys(chosen);
+
+    $('fugue').value = chosen.id;
+    updateKeyOptions(chosen);
+
+    $('key').value = available[
+      Math.floor(Math.random() * available.length)
+    ];
+
+    await load();
+
+    $('status').textContent = 'Loaded annotated Humdrum fugue.';
+
+  } catch (err) {
+    $('status').textContent = 'Load error: ' + err.message;
+    $('subjectScore').textContent = 'Load error: ' + err.message;
+    console.error(err);
+  }
+})();
 
 // Venetian-style hero controls. Key-signature buttons filter random choices;
 // mode buttons filter fugues; +/- transposes the current example.
 const selectedModes = new Set([1, 2, 3, 4, 5, 6, 7, 8]);
 const allowedCounts = new Set([0, 1, 2, 3, 4, 5, 6, 7]);
+
 function updateHero() {
-  $('keyDisplay').textContent = 'Current key: ' + $('key').value + ' ' + (modeIsMinor(currentMode()) ? 'minor' : 'major');
-  document.querySelectorAll('.key-btn').forEach(b => b.classList.toggle('selected', allowedCounts.has(Number(b.dataset.count))));
-  document.querySelectorAll('.mode-filter-btn').forEach(b => b.classList.toggle('selected', selectedModes.has(Number(b.dataset.mode))));
+  const fugue = selectedFugue();
+
+  $('keyDisplay').textContent =
+    'Current key: ' +
+    $('key').value + ' ' +
+    (fugue?.tonality || '');
+
+  document.querySelectorAll('.key-btn').forEach(b => {
+    b.classList.toggle(
+      'selected',
+      allowedCounts.has(Number(b.dataset.count))
+    );
+  });
+
+  document.querySelectorAll('.mode-filter-btn').forEach(b => {
+    b.classList.toggle(
+      'selected',
+      selectedModes.has(Number(b.dataset.mode))
+    );
+  });
 }
+
 document.querySelectorAll('.key-btn').forEach(b => b.addEventListener('click', () => { const n = Number(b.dataset.count); allowedCounts.has(n) ? allowedCounts.delete(n) : allowedCounts.add(n); updateHero() }));
 $('selectAllKeysBtn').addEventListener('click', () => { for (let i = 0; i <= 7; i++)allowedCounts.add(i); updateHero() });
 $('selectNoneKeysBtn').addEventListener('click', () => { allowedCounts.clear(); updateHero() });
 document.querySelectorAll('.mode-filter-btn').forEach(b => b.addEventListener('click', () => { const n = Number(b.dataset.mode); selectedModes.has(n) ? selectedModes.delete(n) : selectedModes.add(n); updateHero() }));
 // Step chromatically while preserving the appropriate major/minor inventory.
 for (const [id, d] of [['downKey', -1], ['upKey', 1]]) $(id).addEventListener('click', () => {
-  const k = $('key'), pool = eligibleKeys(); if (!pool.length) { $('status').textContent = 'No keys enabled'; return }
+  const k = $('key'), pool = eligibleKeys(selectedFugue()); if (!pool.length) { $('status').textContent = 'No keys enabled'; return }
   const oldPc = pc[k.value];
   for (let step = 1; step <= 12; step++) {
     const nextPc = (oldPc + d * step + 120) % 12;
@@ -704,7 +854,7 @@ $('enharmonicBtn').addEventListener('click', () => {
 
   // The alternate must exist in the current mode's
   // major or minor key inventory.
-  const inventory = inventoryForMode(currentMode());
+const inventory = inventoryForFugue(selectedFugue());
 
   if (!inventory.some(item => item.name === alt)) {
     $('status').textContent =
