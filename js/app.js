@@ -175,30 +175,202 @@ function transposeName(p, key) {
 }
 
 function kernDuration(cell) { const m = cell.match(/^(\d+)(\.*)/); if (!m) return 0; let d = 4 / Number(m[1]); for (let i = 0; i < m[2].length; i++)d += 4 / Number(m[1]) / 2 ** (i + 1); return d }
+
 function parseFugue(text) {
-  const lines = text.split(/\r?\n/); let spines = [], t = 0, measure = 1, ends = [0, 0, 0, 0], lastPitch = ['', '', '', '']; const voices = Object.fromEntries(['B', 'T', 'A', 'S'].map(v => [v, { entries: [], rests: [], state: 'counterpoint', start: 0 }]));
-  let lastTime = 0; let warnings = [];
-  for (const line of lines) {
-    if (!line || line.startsWith('!!!') || line.startsWith('!!')) continue; const c = line.split('\t');
-    if (c[0] === '**kern') { spines = c; continue } if (!spines.length) continue;
-    if (c[0].startsWith('=')) { const m = c[0].match(/=(\d+)/); if (m) { measure = Number(m[1]); t = (measure - 1) * 4; ends = ends.map(x => Math.max(x, t)) } continue }
-    if (c[0].startsWith('*')) continue;
-    // The next row occurs at the earliest next onset among the four **kern voices.
-    // A dot retains the previous note; it does not advance the voice clock.
-    for (let i = 0; i < 4; i++) { const cell = c[i] || '.'; if (cell !== '.') { if (ends[i] > t + 0.001) warnings.push(`Overlap at measure ${measure}, voice ${i}`); const d = kernDuration(cell); ends[i] = t + d; if (!cell.includes('r')) lastPitch[i] = notePitch(cell) } }
-    for (let i = 4; i < spines.length; i++) {
-      const voice = spines[i].match(/^\*\*fugue([BTAS])$/)?.[1]; if (!voice) continue; const val = c[i] || '.'; if (val === '.') continue; const v = voices[voice]; for (const marker of val.split(/\s+/)) {
-        if (marker === 'S' || marker === 'A') { if (v.state === 'rest') v.rests.push([v.start, t]); if (v.state === 'subject' || v.state === 'answer') v.entries[v.entries.length - 1].end = t; v.entries.push({ type: marker === 'S' ? 'subject' : 'answer', start: t, end: null, pitch: lastPitch[['B', 'T', 'A', 'S'].indexOf(voice)] }); v.state = marker === 'S' ? 'subject' : 'answer'; v.start = t }
-        else if (marker === '/S' || marker === '/A') { if (v.state === 'subject' || v.state === 'answer') { v.entries[v.entries.length - 1].end = t; v.state = 'counterpoint'; v.start = t } }
-        else if (marker === 'R') { if (v.state === 'subject' || v.state === 'answer') v.entries[v.entries.length - 1].end = t; v.state = 'rest'; v.start = t }
-        else if (marker === '/R') { if (v.state === 'rest') v.rests.push([v.start, t]); v.state = 'counterpoint'; v.start = t }
+  const lines = text.split(/\r?\n/);
+  const order = ['B', 'T', 'A', 'S'];
+
+  const voices = Object.fromEntries(
+    order.map(v => [
+      v,
+      {
+        entries: [],
+        rests: [],
+        state: 'counterpoint',
+        start: 0
+      }
+    ])
+  );
+
+  let spines = [];
+  let measure = 1;
+  let t = 0;
+  let ends = [0, 0, 0, 0];
+  let lastPitch = ['', '', '', ''];
+  let lastTime = 0;
+
+  const warnings = [];
+  const EPS = 0.0001;
+
+  function closeState(voice, time) {
+    if (voice.state === 'rest') {
+      if (time > voice.start + EPS) {
+        voice.rests.push([voice.start, time]);
+      }
+    } else if (
+      voice.state === 'subject' ||
+      voice.state === 'answer'
+    ) {
+      const entry = voice.entries[voice.entries.length - 1];
+      if (entry && entry.end == null) {
+        entry.end = time;
       }
     }
-    const future = ends.filter(x => x > t + 0.0001); if (future.length) t = Math.min(...future); lastTime = Math.max(lastTime, t);
   }
-  const declared = Number(metadata(text, 'END')) || 0; const end = lastTime; for (const v of Object.values(voices)) { if (v.state === 'rest') v.rests.push([v.start, end]); if (v.state === 'subject' || v.state === 'answer') v.entries[v.entries.length - 1].end = end }
-  return { voices, measures: declared || Math.ceil(lastTime / 4), availableBeats: lastTime, warnings };
+
+  function processMarker(name, marker, time) {
+    const voice = voices[name];
+    if (!voice) return;
+
+    if (marker === 'S' || marker === 'A') {
+      closeState(voice, time);
+
+      voice.entries.push({
+        type: marker === 'S' ? 'subject' : 'answer',
+        start: time,
+        end: null,
+        pitch: lastPitch[order.indexOf(name)]
+      });
+
+      voice.state = marker === 'S'
+        ? 'subject'
+        : 'answer';
+
+      voice.start = time;
+      return;
+    }
+
+    if (marker === 'R') {
+      if (voice.state !== 'rest') {
+        closeState(voice, time);
+        voice.state = 'rest';
+        voice.start = time;
+      }
+      return;
+    }
+
+    if (marker === '/R') {
+      if (voice.state === 'rest') {
+        closeState(voice, time);
+        voice.state = 'counterpoint';
+        voice.start = time;
+      }
+      return;
+    }
+
+    if (marker === '/S' || marker === '/A') {
+      if (
+        voice.state === 'subject' ||
+        voice.state === 'answer'
+      ) {
+        closeState(voice, time);
+        voice.state = 'counterpoint';
+        voice.start = time;
+      }
+    }
+  }
+
+  for (const line of lines) {
+    if (
+      !line ||
+      line.startsWith('!!!') ||
+      line.startsWith('!!')
+    ) continue;
+
+    const cells = line.split('\t');
+
+    if (cells[0] === '**kern') {
+      spines = cells;
+      continue;
+    }
+
+    if (!spines.length) continue;
+
+    if (cells[0].startsWith('=')) {
+      if (cells[0].startsWith('==')) break;
+
+      const match = cells[0].match(/^=(\d+)/);
+
+      if (match) {
+        measure = Number(match[1]);
+        t = (measure - 1) * 4;
+        ends = ends.map(end => Math.max(end, t));
+        lastTime = Math.max(lastTime, t);
+      }
+
+      continue;
+    }
+
+    if (cells[0].startsWith('*')) continue;
+
+    // All tokens on this Humdrum row share the same onset.
+    const rowTime = t;
+
+    // Process the four musical voices first.
+    for (let i = 0; i < 4; i++) {
+      const token = cells[i] || '.';
+
+      if (token === '.') continue;
+
+      const duration = kernDuration(token);
+      if (!duration) continue;
+
+      if (ends[i] > rowTime + EPS) {
+        warnings.push(
+          `Overlap at measure ${measure}, voice ${order[i]}`
+        );
+      }
+
+      ends[i] = rowTime + duration;
+
+      if (!token.includes('r')) {
+        lastPitch[i] = notePitch(token);
+      }
+    }
+
+    // Read annotation spines independently of note/rest tokens.
+    for (let i = 4; i < spines.length; i++) {
+      const match = spines[i].match(/^\*\*fugue([BTAS])$/);
+      if (!match) continue;
+
+      const value = (cells[i] || '.').trim();
+      if (!value || value === '.') continue;
+
+      for (const marker of value.split(/\s+/)) {
+        processMarker(match[1], marker, rowTime);
+      }
+    }
+
+    // Advance to the next rhythmic event.
+    const future = ends.filter(end => end > rowTime + EPS);
+
+    if (future.length) {
+      t = Math.min(...future);
+    }
+
+    lastTime = Math.max(
+      lastTime,
+      rowTime,
+      ...ends
+    );
+  }
+
+  const declared = Number(metadata(text, 'END')) || 0;
+  const finalTime = lastTime;
+
+  for (const voice of Object.values(voices)) {
+    closeState(voice, finalTime);
+  }
+
+  return {
+    voices,
+    measures: declared || Math.ceil(finalTime / 4),
+    availableBeats: finalTime,
+    warnings
+  };
 }
+
+
 
 function active(v, t) {
   // Explicitly annotated rests.
